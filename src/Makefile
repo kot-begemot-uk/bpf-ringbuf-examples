@@ -1,11 +1,9 @@
 # SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause)
 OUTPUT := .output
-CLANG ?= clang
+CLANG ?= clang-13
 LLVM_STRIP ?= llvm-strip
-BPFTOOL ?= $(abspath ../tools/bpftool)
-LIBBPF_SRC := $(abspath ../libbpf/src)
-LIBBPF_OBJ := $(abspath $(OUTPUT)/libbpf.a)
-INCLUDES := -I$(OUTPUT)
+BPFTOOL ?= /usr/sbin/bpftool
+INCLUDES := -I$(OUTPUT) -I/usr/include/x86_64-linux-gnu
 CFLAGS := -g -Wall
 ARCH := $(shell uname -m | sed 's/x86_64/x86/')
 
@@ -36,9 +34,9 @@ $(OUTPUT) $(OUTPUT)/libbpf:
 	$(Q)mkdir -p $@
 
 # Build final application
-$(APPS): %: $(OUTPUT)/%.o $(LIBBPF_OBJ) | $(OUTPUT)
+$(APPS): %: $(OUTPUT)/%.o | $(OUTPUT)
 	$(call msg,BINARY,$@)
-	$(Q)$(CC) $(CFLAGS) $^ -lelf -lz -o $@
+	$(Q)$(CC) $(CFLAGS) $^ -lelf -lbpf -lz -o $@
 
 $(patsubst %,$(OUTPUT)/%.o,$(APPS)): %.o: %.skel.h
 
@@ -53,19 +51,11 @@ $(OUTPUT)/%.skel.h: $(OUTPUT)/%.bpf.o | $(OUTPUT)
 	$(Q)$(BPFTOOL) gen skeleton $< > $@
 
 # Build BPF code
-$(OUTPUT)/%.bpf.o: %.bpf.c $(LIBBPF_OBJ) common.h | $(OUTPUT)
+$(OUTPUT)/%.bpf.o: %.bpf.c common.h | $(OUTPUT)
 	$(call msg,BPF,$@)
 	$(Q)$(CLANG) -g -O2 -target bpf -D__TARGET_ARCH_$(ARCH)		      \
 		     $(INCLUDES) -c $(filter %.c,$^) -o $@
 	$(Q)$(LLVM_STRIP) -g $@
-
-# Build libbpf
-$(LIBBPF_OBJ): $(wildcard $(LIBBPF_SRC)/*.[ch] $(LIBBPF_SRC)/Makefile) | $(OUTPUT)/libbpf
-	$(call msg,LIB,$@)
-	$(Q)$(MAKE) -C $(LIBBPF_SRC) BUILD_STATIC_ONLY=1		      \
-		    OBJDIR=$(dir $@)/libbpf DESTDIR=$(dir $@)		      \
-		    INCLUDEDIR= LIBDIR= UAPIDIR=			      \
-		    install
 
 # delete failed targets
 .DELETE_ON_ERROR:
