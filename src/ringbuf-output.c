@@ -4,7 +4,6 @@
 #include <signal.h>
 #include <stdio.h>
 #include <time.h>
-#include <unistd.h>
 #include <sys/resource.h>
 #include <bpf/libbpf.h>
 #include "common.h"
@@ -32,13 +31,9 @@ void bump_memlock_rlimit(void)
 }
 
 static volatile bool exiting = false;
-static char *pin = NULL;
 
 static void sig_handler(int sig)
 {
-    if (pin) {
-        unlink(pin);
-    }
 	exiting = true;
 }
 
@@ -95,11 +90,6 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to create ring buffer\n");
 		goto cleanup;
 	}
-
-    if (argc > 1) {
-        bpf_map__pin(skel->maps.rb, argv[1]);
-        pin = argv[1];
-    }
 
 	/* Process events */
 	printf("%-8s %-5s %-7s %-16s %s\n",
